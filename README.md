@@ -1,3 +1,3 @@
 Supervised machine learning algorithm 
- - Decision Tree
+ - Decision Tree & Random Forest
  - Linear Regression
