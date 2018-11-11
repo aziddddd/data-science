@@ -217,3 +217,60 @@ def runML(clf, d):
 
     # return results
     return [expected, predicted]
+
+# Note - expect convergence warning at small training sizes
+def compare_traintest(data, target, params=None, split=0, scale='linear'):
+
+    # define 0.01 - 0.1, 0.1 - 0.9, 0.91 - 0.99 sample if split array not defined
+    if (split == 0):
+        split = np.concatenate((np.linspace(0.01,0.09,9), np.linspace(0.1,0.9,9), np.linspace(0.91,0.99,9)), axis=None)
+
+    print("parameters")
+    print(params)
+
+    print("Split sample:")
+    print(split)
+
+    train_scores = []
+    test_scores = []
+
+    for s in split:
+
+        print("Running with test size of: %0.2f" % s)
+
+        # get train/test for this split
+        d = model_selection.train_test_split(data, target,
+                                             test_size=s, random_state=0)
+
+        # define classifer
+        if params is not None:
+            clf = tree.DecisionTreeClassifier(**params)
+        else:
+            clf = tree.DecisionTreeClassifier()
+
+        # run classifer
+        e, p = runML(clf, d)
+
+        # get training and test scores for fit and prediction
+        train_scores.append(clf.score(d[0], d[2]))
+        test_scores.append(clf.score(d[1], d[3]))
+
+    # plot results
+    plt.figure(figsize=(15.0, 5.0))
+    if (scale == 'log'):
+        plt.yscale('log')
+    else:
+        plt.yscale('linear')
+    plt.plot(split, train_scores, label='Training accuracy', marker='o')
+    plt.plot(split, test_scores, label='Testing accuracy', marker='o')
+    plt.title('Training and Testing Accuracy')
+    plt.xlabel('Test sample proportion')
+    plt.ylabel('Accuracy')
+    plt.xticks(np.arange(0, 1.0, 0.1))
+    plt.yticks(np.arange(0, 1.1, 0.1))
+    plt.xlim([min(split),max(split)])
+    plt.ylim([0,1.01])
+    plt.grid()
+    plt.legend()
+
+    return
