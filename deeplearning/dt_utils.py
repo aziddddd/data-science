@@ -9,6 +9,7 @@ import matplotlib.colors as colors
 from IPython.display import Image
 from mpl_toolkits.mplot3d import Axes3D
 import itertools
+import seaborn as sns
 
 # preprocess country data
 def gendata(features, path):
@@ -28,15 +29,15 @@ def gendata(features, path):
     # strip all whitespace from all columns
     c = c.applymap(lambda x: x.strip() if type(x) is str else x)
 
-    # set index to country
-    c.set_index('Country', inplace=True)
+#     # set index to country
+#     c.set_index('Country', inplace=True)
 
     # reduce to feature and type columns
     dataset = c[features + output]
 
     # drop duplicates and null values
     dataset = dataset.drop_duplicates().dropna()
-
+    
     # make new birthrate class column
     btype = []
     for b in dataset.Birthrate:
