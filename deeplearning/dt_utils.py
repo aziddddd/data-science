@@ -4,6 +4,11 @@ import math
 import numpy as np
 import pandas as pd
 
+from sklearn import model_selection, ensemble, preprocessing
+from sklearn.preprocessing import MinMaxScaler
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from IPython.display import Image
@@ -37,7 +42,6 @@ def gendata(features, path):
 
     # drop duplicates and null values
     dataset = dataset.drop_duplicates().dropna()
-    
     # make new birthrate class column
     btype = []
     for b in dataset.Birthrate:
@@ -50,6 +54,7 @@ def gendata(features, path):
 
     # remove original birth rate column
     dataset = dataset.drop(columns=['Birthrate'])
+
     # NOTE - alternative if using pandas < 0.20
     #del dataset['Birthrate']
 
@@ -149,15 +154,22 @@ def heatmap(d, labels=None, classes=None, title=None,
     return
 
 # Note - expect convergence warning at small training sizes
-def compare_traintest(data, target, params=None, split=0, scale='linear'):
+def compare_traintest(data, target, model, split=0, scale='linear', **params):
+    
+    #preprocess target data
+    le = preprocessing.LabelEncoder()
+    target_label = le.fit_transform(target)
 
+    # convert integers to dummy variables (i.e. one hot encoded)
+    target_label = np_utils.to_categorical(target_label).astype(float)
+    
     # define 0.01 - 0.1, 0.1 - 0.9, 0.91 - 0.99 sample if split array not defined
     if (split == 0):
         split = np.concatenate((np.linspace(0.01,0.09,9), np.linspace(0.1,0.9,9), np.linspace(0.91,0.99,9)), axis=None)
 
-    print("parameters")
+    print("Parameters")
     print(params)
-
+        
     print("Split sample:")
     print(split)
 
@@ -169,21 +181,33 @@ def compare_traintest(data, target, params=None, split=0, scale='linear'):
         print("Running with test size of: %0.2f" % s)
 
         # get train/test for this split
-        d = model_selection.train_test_split(data, target,
+        d = model_selection.train_test_split(data, target_label,
                                              test_size=s, random_state=0)
 
-        # define classifer
-        if params is not None:
-            clf = tree.DecisionTreeClassifier(**params)
-        else:
-            clf = tree.DecisionTreeClassifier()
+        # get training and test data and targets
+        train_data, test_data, train_target, test_target = d
 
-        # run classifer
-        e, p = runML(clf, d)
+        # Data needs to be scaled to a small range like 0 to 1 for the neural network to work well.
+        scaler = MinMaxScaler(feature_range=(0, 1))
 
-        # get training and test scores for fit and prediction
-        train_scores.append(clf.score(d[0], d[2]))
-        test_scores.append(clf.score(d[1], d[3]))
+        # Scale both the training inputs and outputs
+        train_data = scaler.fit_transform(train_data)
+        test_data = scaler.transform(test_data)
+        
+        # Train the model
+        model.fit(
+            train_data,
+            train_target,
+            **params,
+            validation_data=(test_data, test_target)
+        )
+
+        train_error_rate = model.evaluate(train_data, train_target, verbose=0)
+        test_error_rate = model.evaluate(test_data, test_target, verbose=0)
+
+        # get test scores for fit and prediction
+        train_scores.append(train_error_rate[1])
+        test_scores.append(test_error_rate[1])
 
     # plot results
     plt.figure(figsize=(15.0, 5.0))
@@ -204,3 +228,32 @@ def compare_traintest(data, target, params=None, split=0, scale='linear'):
     plt.legend()
 
     return
+
+def evaluate_model_accuracy(model, data, target_label_1d, **params):
+    print("k-Fold Cross Validation")
+    print("Parameters")
+    print(params)
+
+    kfold = model_selection.StratifiedKFold(n_splits=10, shuffle=True)
+    cvscores = []
+    for train, test in kfold.split(data, target_label_1d):
+        # convert integers to dummy variables (i.e. one hot encoded)
+        target_label = np_utils.to_categorical(target_label_1d).astype(float)
+        
+        # Data needs to be scaled to a small range like 0 to 1 for the neural network to work well.
+        scaler = MinMaxScaler(feature_range=(0, 1))
+
+        # Scale both the training inputs and outputs
+        data[train] = scaler.fit_transform(data[train])
+        data[test] = scaler.fit_transform(data[test])
+        
+        # Fit the model
+        model.fit(data[train], target_label[train], epochs=800, verbose=0)
+
+        # evaluate the model
+        scores = model.evaluate(data[test], target_label[test], verbose=0)
+        print('{0:} : {1:0.2f}%'.format(model.metrics_names[1], scores[1]*100))
+        cvscores.append(scores[1] * 100)
+    print('Model Accuracy : {0:0.2f}% (+/- {1:0.2f}%)'.format(np.mean(cvscores), np.std(cvscores)))
+    
+    return np.mean(cvscores)
